@@ -1,0 +1,17 @@
+ADD:
++ Routes
+* Sending Images
++ FAVICON issue
+
+CURRENT:
++ Abstracting into structs and files
+// Going to have to make the http_server_run() function and the routes
+// start by fixing the issues with the Http_Server type and make sure
+// that all references to address is actually referring the address in
+// the Http_Server type.
+
+
+DONE:
+- Parsing HTML
+- Dict header file
+- Parse URI data

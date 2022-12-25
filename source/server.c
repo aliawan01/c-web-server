@@ -9,24 +9,66 @@
 #include <sys/socket.h>
 #include <sys/sendfile.h>
 #include <netinet/ip.h>
+#include "dict.h"
+#include "parse_uri.h"
+#include "http_server.c"
+
+char* get_html_from_file(const char* path) {
+	FILE* html_file = fopen(path, "rb");
+
+	if (!html_file) {
+		printf("No html file exists in the path you specified: %s\n", path);
+		exit(-1);
+	}
+
+	fseek(html_file, 0, SEEK_END);
+	int file_size = ftell(html_file);
+	rewind(html_file);
+	char* html_code = malloc(file_size + 1);
+	html_code[file_size] = '\0';
+	fread(html_code, sizeof(char), file_size, html_file);
+	return html_code;
+}
+
+
+char* get_image_from_file(const char* path) {
+	FILE* image_file = fopen(path, "rb");
+
+	if (!image_file) {
+		printf("No image exists in the path you specified: %s\n", path);
+		exit(-1);
+	}
+
+	fseek(image_file, 0, SEEK_END);
+	int file_size = ftell(image_file);
+	rewind(image_file);
+	char* image_bin_data = malloc(file_size + 1);
+	image_bin_data[file_size] = '\0';
+	fread(image_bin_data, sizeof(char), file_size, image_file);
+	fclose(image_file);
+
+	return image_bin_data;
+}
+
+int get_image_file_size(const char* path) {
+	FILE* image_file = fopen(path, "rb");
+
+	if (!image_file) {
+		printf("No image exists in the path you specified: %s\n", path);
+		exit(-1);
+	}
+
+	fseek(image_file, 0, SEEK_END);
+	int file_size = ftell(image_file);
+	rewind(image_file);
+	fclose(image_file);
+
+	return file_size + 1;
+}
 
 int main(void) {
-	int tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if (tcp_socket < 0) {
-		printf("There was an error when trying to CREATE the socket\n");
-		exit(-1);
-	}
-
-	struct sockaddr_in address = {0};
-	address.sin_family = AF_INET;
-	address.sin_port = htons(8080);
-	address.sin_addr.s_addr = INADDR_ANY;
-
-	int bind_socket = bind(tcp_socket, (const struct sockaddr*)&address, sizeof(address));
-	if (bind_socket < 0) {
-		printf("There was an error when trying to BIND the socket\n");
-		exit(-1);
-	}
+	Http_Server tcp_socket;
+	http_create_server(&tcp_socket, "localhost", 8080);
 
 	printf("Server listening on port 8080...\n");
 	int listen_socket = listen(tcp_socket, 10);
@@ -56,17 +98,28 @@ int main(void) {
 			printf("%s\n", information);
 		}
 
-		if (strncmp(information, "GET /favicon.ico", 16) == 0) {
-			printf("Client asked for FAVICON\n");
+		/* if (strncmp(information, "GET /favicon.ico", 16) == 0) { */
+		/* 	printf("----------------------------\n"); */
+		/* 	printf("Client asked for FAVICON\n"); */
+		/* 	printf("----------------------------\n"); */
 
-			char* data_to_send = "HTTP/1.1 404 Not Found\r\n";
-			ssize_t send_status = write(client_socket, (char*)data_to_send, strlen((char*)data_to_send));
-			if (send_status < 0) {
-				printf("Could not SEND message to client.\n");
-			}
-			else {
-				printf("Get /favicon.ico request was responded with code 404: Not Found.\n");
-			}
+		/* 	char* image_data = get_image_from_file("favicon.ico"); */
+		/* 	int image_data_size = get_image_file_size("favicon.ico"); */
+		/* 	char* data_to_send = malloc(20000); */
+		/* 	sprintf(data_to_send, "HTTP/1.1 200 OK\nContent-Length: %d\r\n\r\n%s", image_data_size, image_data); */
+
+		/* 	ssize_t send_status = write(client_socket, (char*)data_to_send, strlen((char*)data_to_send)); */
+		/* 	if (send_status < 0) { */
+		/* 		printf("Could not SEND message to client.\n"); */
+		/* 	} */
+		/* 	else { */
+		/* 		printf("Get /favicon.ico request was responded with the favicon.ico image.\n"); */
+		/* 	} */
+
+		/* 	free(data_to_send); */
+		/* } */
+		if (strncmp(information, "POST", 4) == 0) {
+			printf("got information\n");
 		}
 		else {
 			char buffer[1024];
@@ -75,7 +128,9 @@ int main(void) {
 			strftime(buffer, sizeof(buffer), "Date: %a, %d %b %Y %T %Z", tm);
 
 			char* data_to_send = malloc(1000);
-			sprintf(data_to_send, "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n%s\r\n\r\n<html>\n<head><link rel='icon' href='data:;base64,='></head>\n<h1>Finally rendered the html</h1><p>This is some more information!</p>\n</html>", buffer);
+			char* html_data = get_html_from_file("static/first_page.html");
+
+			sprintf(data_to_send, "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n%s\r\n\r\n%s", buffer, html_data);
 			printf("%s\n", data_to_send);
 
 			ssize_t send_status = write(client_socket, (char*)data_to_send, strlen((char*)data_to_send));
@@ -87,7 +142,9 @@ int main(void) {
 			}
 
 			free(data_to_send);
+			free(html_data);
 		}
+
 		close(client_socket);
 		printf("Disconnected client.\n");
 		printf("Number of connections: %d\n", num_of_connections);
@@ -98,4 +155,31 @@ int main(void) {
 	return 0;
 }
 
+int thing(void) {
+	char uri_data[] = "fname=1%431%38d&lname=morningb1&something=print hello world";
 
+	dict* dictionary = parse_uri_into_dict(uri_data);
+
+	char** keys = dict_get_keys(dictionary);
+	int num_of_keys = dict_get_num_of_keys(dictionary);
+	
+	char** values_list = malloc(num_of_keys);
+	for (int i = 0; i < num_of_keys; i++) {
+		char* key = keys[i];
+		char* value = (char*)dict_get_value(dictionary, key);
+
+		values_list[i] = malloc(100);
+		handle_escape_characters(values_list[i], value);
+		printf("new_value: %s\n", values_list[i]);
+
+		dict_update_value(dictionary, key, (void*)values_list[i]);
+	}
+	
+	free(values_list);
+
+	dict_print_dict(dictionary, "char*");
+
+	dict_delete_dict(dictionary);
+
+	return 0;
+}
