@@ -80,11 +80,13 @@ void dict_print_dict(dict* dictionary, char* print_type) {
 	for (int index = 0; cur_dict != NULL; index++, cur_dict = cur_dict->next) {
 		printf("Index: %d\n", index);
 		printf("  Key: %s\n", cur_dict->key);
-		if (strcmp(print_type, "char*") == 0) {
-			printf("  Value: %s\n", (char*)cur_dict->value);
-		}		
-		else if (strcmp(print_type, "int") == 0) {
-			printf("  Value: %d\n", (int)cur_dict->value);
+		if (print_type != NULL) {
+			if (strcmp(print_type, "char*") == 0) {
+				printf("  Value: %s\n", (char*)cur_dict->value);
+			}		
+			else if (strcmp(print_type, "int") == 0) {
+				printf("  Value: %d\n", (int)cur_dict->value);
+			}
 		}
 		else {
 			printf("  Value: %p\n", cur_dict->value);

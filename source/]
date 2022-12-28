@@ -70,15 +70,16 @@ int main(void) {
 		if (strcmp(current_route, key) == 0) {
 			printf("Found it...\n");
 
-			typedef char* (*response)(dict*);
-			void* thing = dict_get_value(server.get_routes, key);
-			response output = (response)thing;
-			printf("%s\n", output(NULL));
+			char* (*response)(dict*) = (char* (*response)(dict*))(dict_get_value(server.get_routes, key))
 		}
 
 	}
 	
-	http_server_run(&server);
+	dict_print_dict(dictionary, NULL);
+
+	dict_delete_dict(server.get_routes);
+
+	/* http_server_run(&server); */
 
 	return 0;
 }
