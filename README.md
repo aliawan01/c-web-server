@@ -27,3 +27,5 @@ and remember to include the header file which is in `include/http_server.h`.
 ### Running the example
 `bin/server`
 
+Open a browser, and head to the url `localhost:8080`
+
