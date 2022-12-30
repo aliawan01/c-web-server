@@ -1,34 +1,26 @@
-// Don't forget to include things when you compile it separatley
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <arpa/inet.h>
+#include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sendfile.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "dict.h"
-
-char* get_html_from_file(const char* path) {
-	FILE* html_file = fopen(path, "rb");
-
-	if (!html_file) {
-		printf("No html file exists in the path you specified: %s\n", path);
-		exit(-1);
-	}
-
-	fseek(html_file, 0, SEEK_END);
-	int file_size = ftell(html_file);
-	rewind(html_file);
-	char* html_code = malloc(file_size + 1);
-	html_code[file_size] = '\0';
-	fread(html_code, sizeof(char), file_size, html_file);
-	return html_code;
-}
+#include "parse_uri.h"
+#include "get.h"
 
 enum Colors {
 	BLACK = 0,
 	RED = 1,
 	YELLOW = 2,
-	GREEN = 3
+	GREEN = 3,
+	BLUE = 4
 };
 
 typedef struct {
@@ -51,6 +43,9 @@ void http_log(int color, char* msg) {
 	else if (color == YELLOW) {
 		printf("\033[0;33m");
 	} 
+	else if (color == BLUE) {
+		printf("\033[0;34m");
+	}
 
 	printf("%s", msg);
 	printf("\033[0m");
@@ -118,7 +113,7 @@ void http_server_run(Http_Server* server) {
 
 		http_log(GREEN, "Connected to the client!\n");
 
-		char information[1024];
+		char* information = malloc(5024);
 		ssize_t read_status = read(client_socket, information, 1024);
 		if (read_status < 0) {
 			http_log(RED, "There was an error when trying to run the READ function.\n");
@@ -128,6 +123,105 @@ void http_server_run(Http_Server* server) {
 			printf("%s\n", information);
 		}
 
+		// Getting the route specified in the request
+		char current_route[100];
+		int current_route_i = 0;
+		int first_space = 0;
+		for (int i = 0; i < strlen(information); i++) {
+			if ((i != 0) && (information[i-1] == ' ') && (first_space == 0)) {
+				current_route[current_route_i] = information[i];
+				++current_route_i;
+				first_space = 1;
+			}
+			else if ((i != 0) && (information[i] == ' ') && (first_space != 0)) {
+				current_route[current_route_i] = '\0';
+				break;
+			}
+			else if (first_space != 0) {
+				current_route[current_route_i] = information[i];
+				++current_route_i;
+			}
+		}
+
+		char* data_to_send = malloc(5000);
+		memset(data_to_send, 0, (size_t)5000);
+		int found = 0;
+		if (strncmp(information, "GET", 3) == 0) {
+			dict* dictionary = server->get_routes;
+			char** keys = dict_get_keys(dictionary);
+			int num_of_keys = dict_get_num_of_keys(dictionary);
+			
+			for (int i = 0; i < num_of_keys; i++) {
+				char* key = keys[i];
+				if (strcmp(current_route, key) == 0) {
+					typedef char* (*response)(dict*);
+					void* void_response = dict_get_value(server->get_routes, key);
+					response output = (response)void_response;
+					data_to_send = output(NULL);
+					found = 1;
+				}
+			}
+
+			free(keys);
+		}
+		else if (strncmp(information, "POST", 4) == 0) {
+			char request_body[600];
+			for (int i = 0; i < strlen(information); i++) {
+				if ((i > 5) &&
+					(information[i] == '\n') &&
+					(information[i-1] == '\r') && 
+					(information[i-2] == '\n') && 
+					(information[i-3] == '\r')) {
+
+					strcpy(request_body, information+i);
+				}
+			}
+
+			dict* data_in_post_request = parse_uri_into_dict(request_body);
+
+			dict* dictionary = server->post_routes;
+			char** keys = dict_get_keys(dictionary);
+			int num_of_keys = dict_get_num_of_keys(dictionary);
+			
+			for (int i = 0; i < num_of_keys; i++) {
+				char* key = keys[i];
+				if (strcmp(current_route, key) == 0) {
+					typedef char* (*response)(dict*);
+					void* void_response = dict_get_value(server->post_routes, key);
+					response output = (response)void_response;
+					data_to_send = output(data_in_post_request);
+					found = 1;
+				}
+			}
+
+			dict_delete_dict(data_in_post_request);
+			data_in_post_request = NULL;
+			free(keys);
+		}
+
+		if (found == 0) {
+			strcpy(data_to_send, "<html><h1>404</h1><p>Page not found</p>");
+		}
+
+		char* send_data = malloc(5150);
+		strcpy(send_data, "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\r\n\r\n");
+		strcat(send_data, data_to_send);
+
+		ssize_t send_status = write(client_socket, (char*)send_data, strlen((char*)send_data));
+		if (send_status < 0) {
+			http_log(RED, "Could not SEND message to client.\n");
+		}
+		else {
+			http_log(GREEN, "Sent information to the client.\n");
+		}
+
+		free(send_data);
+		free(data_to_send);
+		free(information);
+
+		send_data = NULL;
+		data_to_send = NULL;
+		information = NULL;
 
 		close(client_socket);
 		http_log(YELLOW, "Disconnected client.\n");
@@ -136,54 +230,3 @@ void http_server_run(Http_Server* server) {
 
 	close(server->socket);
 }
-
-
-
-		/* if (strncmp(information, "GET /favicon.ico", 16) == 0) { */
-		/* 	printf("----------------------------\n"); */
-		/* 	printf("Client asked for FAVICON\n"); */
-		/* 	printf("----------------------------\n"); */
-
-		/* 	char* image_data = get_image_from_file("favicon.ico"); */
-		/* 	int image_data_size = get_image_file_size("favicon.ico"); */
-		/* 	char* data_to_send = malloc(20000); */
-		/* 	sprintf(data_to_send, "HTTP/1.1 200 OK\nContent-Length: %d\r\n\r\n%s", image_data_size, image_data); */
-
-		/* 	ssize_t send_status = write(client_socket, (char*)data_to_send, strlen((char*)data_to_send)); */
-		/* 	if (send_status < 0) { */
-		/* 		printf("Could not SEND message to client.\n"); */
-		/* 	} */
-		/* 	else { */
-		/* 		printf("Get /favicon.ico request was responded with the favicon.ico image.\n"); */
-		/* 	} */
-
-		/* 	free(data_to_send); */
-		/* } */
-		/* if (strncmp(information, "POST", 4) == 0) { */
-		/* 	http_log(YELLOW, "got information\n"); */
-		/* } */
-		/* else { */
-		/* 	/1* char buffer[1024]; *1/ */
-		/* 	/1* time_t time_since_epoch = time(NULL); *1/ */
-		/* 	/1* struct tm* tm = gmtime(&time_since_epoch); *1/ */
-		/* 	/1* strftime(buffer, sizeof(buffer), "Date: %a, %d %b %Y %T %Z", tm); *1/ */
-
-		/* 	char* data_to_send = malloc(10000); */
-		/* 	/1* char* html_data = get_html_from_file("static/first_page.html"); *1/ */
-
-		/* 	/1* sprintf(data_to_send, "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n%s\r\n\r\n%s", buffer, html_data); *1/ */
-
-		/* 	strcpy(data_to_send, "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><link rel='shortcut icon' href='data:,' /></head><h1>Hello World!</h1></html>"); */
-		/* 	printf("%s\n", data_to_send); */
-
-		/* 	ssize_t send_status = write(client_socket, (char*)data_to_send, strlen((char*)data_to_send)); */
-		/* 	if (send_status < 0) { */
-		/* 		http_log(RED, "Could not SEND message to client.\n"); */
-		/* 	} */
-		/* 	else { */
-		/* 		http_log(GREEN, "Sent information to the client.\n"); */
-		/* 	} */
-
-		/* 	free(data_to_send); */
-		/* 	free(html_data); */
-		/* } */

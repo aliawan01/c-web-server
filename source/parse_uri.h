@@ -13,7 +13,8 @@ void chop_string(char* dest, char* string, int start_index, int end_index) {
 void chop_string_from_array(char** dest, char* string, int start_index, int end_index, int dest_index) {
 	end_index -= start_index;
 	string += start_index;
-	dest[dest_index] = malloc(strlen(string));
+	dest[dest_index] = NULL;
+	dest[dest_index] = calloc(200, sizeof(char));
 	strncpy(dest[dest_index], string, end_index);
 }
 
@@ -85,7 +86,9 @@ dict* parse_uri_into_dict(char* uri) {
 	int prev = 0;
 	char key_val[500];
 	char** value = malloc(1000); 
+	char** new_value = malloc(1000);
 	int value_i = 0;
+	int new_value_i = 0;
 
 	for (int i = 0; i < uri_len; i++) {
 		if ((prev == 0) && (uri[i] == '=')) {
@@ -104,16 +107,23 @@ dict* parse_uri_into_dict(char* uri) {
 			}
 			chop_string_from_array(value, uri, prev+1, i, value_i);
 			prev = i;
+
+			new_value[new_value_i] = malloc(100);
+			handle_escape_characters(new_value[new_value_i], value[value_i]);
+
 			if (dictionary == NULL) {
-				dictionary = create_dict(key_val, (void*)value[value_i]);
+				dictionary = create_dict(key_val, (void*)new_value[new_value_i]);
 			}
 			else {
-				dict_add_element(dictionary, key_val, (void*)value[value_i]);
+				dict_add_element(dictionary, key_val, (void*)new_value[new_value_i]);
 			}
+
 			++value_i;
+			++new_value_i;
 		}
 	}
 
+	free(new_value);
 	free(value);
 
 	return dictionary;
