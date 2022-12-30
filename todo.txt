@@ -1,3 +1,0 @@
-FIX:
-- Fix the issue where there are random characters being added at the end of the data_to_send string (seems to be happening when
-  we create the dictionary containing the URI data)

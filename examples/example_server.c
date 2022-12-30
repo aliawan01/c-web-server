@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "http_server.c"
+#include "http_server.h"
 
 char* show_first_page(dict* data) {
 	return get_image_from_file("static/first_page.html");
